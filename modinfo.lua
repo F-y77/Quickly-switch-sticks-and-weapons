@@ -41,8 +41,8 @@ local selected_language = modinfo[language]
 
 name = selected_language.name
 description = selected_language.description
-author = "Your Name"
-version = "1.0"
+author = "Y77"
+version = "1.01"
 forumthread = "/"
 icon_atlas = "modicon.xml"
 icon = "modicon.tex"
