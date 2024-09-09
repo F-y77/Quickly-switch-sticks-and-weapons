@@ -1,87 +1,80 @@
 -- modmain.lua
-
+ 
 local G = GLOBAL
 local keybind_switch = G["KEY_"..GetModConfigData("switchkey")]
 local keybind_summon = G["KEY_"..GetModConfigData("summonkey")]
-
+ 
 local original_slot = nil
 local summon_items = { "cane", "walking_stick", "orangestaff" }
-
-local function IsInGameplay()
-    return G.ThePlayer ~= nil and G.TheFrontEnd:GetActiveScreen().name == "HUD"
-end
-
-local function CanSwitchItem()
-    return IsInGameplay() and not G.ThePlayer.replica.inventory:GetActiveItem()
-end
-
-local function MightBeTyping()
-    if G.ThePlayer ~= nil and G.ThePlayer.HUD:HasInputFocus() then
-        return true
+ 
+if G.TheNet:GetIsServer() then  -- 确保只在服务器运行
+    -- 检查是否在游戏内
+    local function IsInGameplay()
+        return G.ThePlayer ~= nil and G.TheFrontEnd:GetActiveScreen().name == "HUD"
     end
-
-    if (G.TheFrontEnd:GetActiveScreen() and G.TheFrontEnd:GetActiveScreen().name or ""):find("HUD") ~= nil then
-        return false
+ 
+    -- 检查玩家是否可以切换物品
+    local function CanSwitchItem(player)
+        return IsInGameplay() and not player.replica.inventory:GetActiveItem()
     end
-
-    return true
-end
-
-local function EquipNextWeapon()
-    if G.ThePlayer.components.inventory then
-        local weapons = G.ThePlayer.components.inventory:FindItems(function(item)
-            return item.components.weapon ~= nil and not G.table.contains(summon_items, item.prefab)
-        end)
-        if #weapons > 0 then
-            local hand = G.ThePlayer.replica.inventory:GetEquippedItem(G.EQUIPSLOTS.HANDS)
-            local next_weapon = nil
-            if hand then
-                for i, weapon in ipairs(weapons) do
-                    if weapon == hand and i < #weapons then
-                        next_weapon = weapons[i + 1]
-                        break
+ 
+    -- 装备下一个武器
+    local function EquipNextWeapon(player)
+        if player.components.inventory then
+            local weapons = player.components.inventory:FindItems(function(item)
+                return item.components.weapon ~= nil and not G.table.contains(summon_items, item.prefab)
+            end)
+            if #weapons > 1 then -- 确保有超过一个武器
+                local hand = player.replica.inventory:GetEquippedItem(G.EQUIPSLOTS.HANDS)
+                local next_weapon = nil
+                if hand then
+                    for i, weapon in ipairs(weapons) do
+                        if weapon == hand and i < #weapons then
+                            next_weapon = weapons[i + 1]
+                            break
+                        end
                     end
-                end
-                if not next_weapon then
+                    if not next_weapon then
+                        next_weapon = weapons[1]
+                    end
+                else
                     next_weapon = weapons[1]
                 end
+                original_slot = player.components.inventory:GetItemSlot(next_weapon)
+                player.components.inventory:Equip(next_weapon)
+                print("Equipped weapon:", next_weapon.prefab)
             else
-                next_weapon = weapons[1]
+                print("No weapon found in inventory or only one weapon available.")
             end
-            original_slot = G.ThePlayer.components.inventory:GetItemSlot(next_weapon)
-            G.ThePlayer.components.inventory:Equip(next_weapon)
-            print("Equipped weapon:", next_weapon.prefab)
-        else
-            print("No weapon found in inventory.")
         end
     end
-end
-
-local function SwitchWeapon()
-    if not CanSwitchItem() or MightBeTyping() then return end
-
-    EquipNextWeapon()
-end
-
-local function SummonItem()
-    if G.ThePlayer.components.inventory then
-        local item = G.ThePlayer.components.inventory:FindItem(function(item)
-            return G.table.contains(summon_items, item.prefab)
-        end)
-        if item then
-            G.ThePlayer.components.inventory:Equip(item)
-            print("Equipped item:", item.prefab)
-        else
-            print("No summonable item found in inventory.")
+ 
+    -- 召唤物品
+    local function SummonItem(player)
+        if player.components.inventory then
+            local item = player.components.inventory:FindItem(function(item)
+                return G.table.contains(summon_items, item.prefab)
+            end)
+            if item then
+                player.components.inventory:Equip(item)
+                print("Equipped item:", item.prefab)
+                -- 这里可以添加逻辑来处理召唤物品的效果
+            else
+                print("No summonable item found in inventory.")
+            end
         end
     end
+ 
+    -- 处理玩家输入
+    G.TheInput:AddKeyDownHandler(keybind_switch, function()
+        local player = G.ThePlayer
+        if not CanSwitchItem(player) then return end
+        EquipNextWeapon(player)
+    end)
+ 
+    G.TheInput:AddKeyDownHandler(keybind_summon, function()
+        local player = G.ThePlayer
+        if not CanSwitchItem(player) then return end
+        SummonItem(player)
+    end)
 end
-
-G.TheInput:AddKeyDownHandler(keybind_switch, function()
-    SwitchWeapon()
-end)
-
-G.TheInput:AddKeyDownHandler(keybind_summon, function()
-    if not CanSwitchItem() or MightBeTyping() then return end
-    SummonItem()
-end)
